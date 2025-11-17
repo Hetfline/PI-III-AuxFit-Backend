@@ -1,0 +1,1 @@
+Backend do AuxFit, responsável pela lógica de negócio, gerenciamento de dados e integrações com IA e automações via n8n. Contém toda a API do aplicativo. Projeto desenvolvido para o Projeto Integrador III do curso de Sistemas de Informação, 4º período, UNIPAM.
