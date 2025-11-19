@@ -1,72 +1,61 @@
 const { supabase, supabaseAdmin } = require('../config/supabase');
 
 class AuthController {
-  // Registro de novo usuário
+  // 1. REGISTRO SIMPLIFICADO (Apenas cria a conta)
   async register(req, res) {
     try {
-      const {
-        email,
-        password,
-        nome,
-        sexo,
-        data_nascimento,
-        altura,
-        peso_inicial,
-        objetivo
-      } = req.body;
+      const { email, password, nome } = req.body;
 
-      // Validações básicas
-      if (!email || !password || !nome || !sexo || !data_nascimento || !altura || !peso_inicial || !objetivo) {
-        return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+      // Valida apenas o essencial agora
+      if (!email || !password || !nome) {
+        return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
       }
 
-      if (!['M', 'F', 'Outro'].includes(sexo)) {
-        return res.status(400).json({ error: 'Sexo inválido' });
-      }
-
-      // 1. Criar usuário no Supabase Auth
+      // Cria no Auth do Supabase
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { nome } // Metadados opcionais
-        }
+        options: { data: { nome } }
       });
 
       if (authError) {
         return res.status(400).json({ error: authError.message });
       }
 
-      // 2. Criar registro na tabela usuarios usando o UUID do auth
+      if (!authData.user) {
+        return res.status(400).json({ error: 'Erro ao criar usuário no Auth.' });
+      }
+
+      // Cria registro na tabela usuarios (apenas com o que temos)
       const { data: userData, error: userError } = await supabaseAdmin
         .from('usuarios')
         .insert([{
-          id: authData.user.id, // UUID do Supabase Auth
+          id: authData.user.id,
           nome,
           email,
-          sexo,
-          data_nascimento,
-          altura,
-          peso_inicial,
-          objetivo
+          // Os outros campos ficarão NULL automaticamente
         }])
         .select()
         .single();
 
       if (userError) {
-        // Se falhar ao criar o usuário, tentar deletar o auth criado
+        // Se falhar ao criar na tabela pública, tentar deletar o auth criado para não ficar "orfão"
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-        return res.status(400).json({ error: 'Erro ao criar perfil do usuário' });
+        console.error('Erro userError:', userError);
+        return res.status(400).json({ error: 'Erro ao criar perfil do usuário no banco.' });
       }
 
-      return res.status(201).json({
-        message: 'Usuário criado com sucesso! Verifique seu email para confirmar.',
-        user: {
-          id: userData.id,
-          nome: userData.nome,
-          email: userData.email
-        }
+      // Retorna o token já aqui para o usuário já sair logado!
+      const { data: sessionData } = await supabase.auth.signInWithPassword({
+        email, password
       });
+
+      return res.status(201).json({
+        message: 'Usuário criado!',
+        user: userData,
+        session: sessionData.session
+      });
+
     } catch (error) {
       console.error('Erro no registro:', error);
       return res.status(500).json({ error: 'Erro interno do servidor' });
@@ -106,13 +95,7 @@ class AuthController {
       return res.status(200).json({
         message: 'Login realizado com sucesso',
         session: data.session,
-        user: {
-          id: usuario.id,
-          nome: usuario.nome,
-          email: usuario.email,
-          sexo: usuario.sexo,
-          objetivo: usuario.objetivo
-        }
+        user: usuario
       });
     } catch (error) {
       console.error('Erro no login:', error);
@@ -166,7 +149,7 @@ class AuthController {
       }
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'http://localhost:3000/reset-password' // Ajuste conforme necessário
+        redirectTo: 'http://localhost:3000/reset-password'
       });
 
       if (error) {
@@ -207,6 +190,58 @@ class AuthController {
       return res.status(500).json({ error: 'Erro interno do servidor' });
     }
   }
+
+  // 2. NOVO MÉTODO: COMPLETAR ONBOARDING
+  async completeProfile(req, res) {
+    try {
+      // O user ID vem do middleware de autenticação (req.user)
+      // Se o middleware não estiver rodando ou o token for inválido, isso pode quebrar,
+      // mas a rota está protegida, então req.user deve existir.
+      const userId = req.user?.id; 
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+      }
+
+      const {
+        sexo,
+        data_nascimento,
+        altura,
+        peso_inicial,
+        objetivo,
+        nivel_atividade // Nota: Adicione este campo na tabela usuarios ou perfil_treino depois
+      } = req.body;
+
+      // Atualiza na tabela usuarios
+      const { data, error } = await supabase
+        .from('usuarios')
+        .update({
+          sexo,
+          data_nascimento,
+          altura,
+          peso_inicial,
+          objetivo
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Erro supabase update:", error);
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.status(200).json({ 
+        message: 'Perfil atualizado com sucesso!', 
+        user: data 
+      });
+
+    } catch (error) {
+      console.error('Erro no onboarding:', error);
+      return res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  }
 }
 
+// ISSO AQUI QUE ESTAVA FALTANDO OU ESTAVA ERRADO NO SEU ARQUIVO:
 module.exports = new AuthController();
