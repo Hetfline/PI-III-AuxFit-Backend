@@ -2,11 +2,12 @@ const { supabaseAdmin } = require('../config/supabase');
 
 class RefeicaoController {
   
-  // Criar nova refeição PARA O USUÁRIO LOGADO
+  // Criar nova refeição
   async create(req, res) {
     try {
-      const { nome, horario, tipo_refeicao } = req.body;
-      const usuario_fk = req.user.id; // Pega o ID do usuário logado (do middleware)
+      // Adicionado meta_calorias
+      const { nome, horario, tipo_refeicao, meta_calorias } = req.body;
+      const usuario_fk = req.user.id;
 
       if (!nome || !tipo_refeicao) {
         return res.status(400).json({ error: 'Nome e tipo de refeição são obrigatórios' });
@@ -16,16 +17,15 @@ class RefeicaoController {
         .from('refeicoes')
         .insert([{ 
           nome, 
-          horario, // Opcional
+          horario, 
           tipo_refeicao,
-          usuario_fk // ID do usuário é obrigatório
+          meta_calorias: meta_calorias || 0, // Salva a meta
+          usuario_fk
         }])
         .select()
         .single();
 
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
+      if (error) return res.status(400).json({ error: error.message });
 
       return res.status(201).json(data);
     } catch (error) {
@@ -34,19 +34,34 @@ class RefeicaoController {
     }
   }
 
-  // Listar todas as refeições DO USUÁRIO LOGADO
+  // Listar todas as refeições
   async getAllByUser(req, res) {
     try {
       const usuario_fk = req.user.id;
 
       const { data, error } = await supabaseAdmin
         .from('refeicoes')
-        .select('*')
-        .eq('usuario_fk', usuario_fk); // Filtro de segurança
+        .select(`
+          *,
+          refeicao_itens (
+            id,
+            quantidade,
+            unidade_medida,
+            alimentos (
+              id,
+              nome,
+              calorias,
+              proteinas,
+              carboidratos,
+              gorduras,
+              unidade_base
+            )
+          )
+        `)
+        .eq('usuario_fk', usuario_fk)
+        .order('id', { ascending: true });
 
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
+      if (error) return res.status(400).json({ error: error.message });
 
       return res.status(200).json(data);
     } catch (error) {
@@ -54,7 +69,7 @@ class RefeicaoController {
     }
   }
 
-  // Obter uma refeição por ID (E DO USUÁRIO LOGADO)
+  // Obter uma refeição por ID
   async getById(req, res) {
     try {
       const { id } = req.params;
@@ -62,14 +77,28 @@ class RefeicaoController {
 
       const { data, error } = await supabaseAdmin
         .from('refeicoes')
-        .select('*')
+        .select(`
+          *,
+          refeicao_itens (
+            id,
+            quantidade,
+            unidade_medida,
+            alimentos (
+              id,
+              nome,
+              calorias,
+              proteinas,
+              carboidratos,
+              gorduras,
+              unidade_base
+            )
+          )
+        `)
         .eq('id', id)
-        .eq('usuario_fk', usuario_fk) // Dupla verificação
+        .eq('usuario_fk', usuario_fk)
         .single();
 
-      if (error || !data) {
-        return res.status(404).json({ error: 'Refeição não encontrada' });
-      }
+      if (error || !data) return res.status(404).json({ error: 'Refeição não encontrada' });
 
       return res.status(200).json(data);
     } catch (error) {
@@ -77,28 +106,24 @@ class RefeicaoController {
     }
   }
 
-  // Atualizar uma refeição (DO USUÁRIO LOGADO)
+  // Atualizar
   async update(req, res) {
     try {
       const { id } = req.params;
       const usuario_fk = req.user.id;
-      const { nome, horario, tipo_refeicao } = req.body;
+      // Adicionado meta_calorias
+      const { nome, horario, tipo_refeicao, meta_calorias } = req.body;
 
       const { data, error } = await supabaseAdmin
         .from('refeicoes')
-        .update({ nome, horario, tipo_refeicao })
+        .update({ nome, horario, tipo_refeicao, meta_calorias })
         .eq('id', id)
-        .eq('usuario_fk', usuario_fk) // Filtro de segurança
+        .eq('usuario_fk', usuario_fk)
         .select()
         .single();
 
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
-
-      if (!data) {
-         return res.status(404).json({ error: 'Refeição não encontrada ou não pertence a você' });
-      }
+      if (error) return res.status(400).json({ error: error.message });
+      if (!data) return res.status(404).json({ error: 'Refeição não encontrada' });
 
       return res.status(200).json(data);
     } catch (error) {
@@ -106,29 +131,21 @@ class RefeicaoController {
     }
   }
 
-  // Deletar uma refeição (DO USUÁRIO LOGADO)
+  // Deletar
   async delete(req, res) {
     try {
       const { id } = req.params;
       const usuario_fk = req.user.id;
 
-      const { error, data } = await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from('refeicoes')
         .delete()
         .eq('id', id)
-        .eq('usuario_fk', usuario_fk) // Filtro de segurança
-        .select(); // Adicionar select para verificar se algo foi deletado
+        .eq('usuario_fk', usuario_fk);
 
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
+      if (error) return res.status(400).json({ error: error.message });
 
-      // Supabase V2: 'data' é nulo no delete. Verificamos 'count' (ou a falta de erro)
-      // Se RLS estivesse ativa, o delete falharia, mas como usamos supabaseAdmin
-      // ele deleta se o 'id' e 'usuario_fk' baterem. Se não bater, não dá erro,
-      // apenas nada é deletado.
-
-      return res.status(204).send(); // 204 No Content
+      return res.status(204).send();
     } catch (error) {
       return res.status(500).json({ error: 'Erro interno do servidor' });
     }

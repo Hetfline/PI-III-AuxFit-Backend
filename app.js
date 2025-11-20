@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authRoutes');
 
 // --- ADICIONE TODAS AS NOVAS ROTAS ---
 const alimentoRoutes = require('./routes/alimentoRoutes');
+const despensaRoutes = require('./routes/despensaRoutes');
 const refeicaoRoutes = require('./routes/refeicaoRoutes');
 const exercicioRoutes = require('./routes/exercicioRoutes');
 const treinoRoutes = require('./routes/treinoRoutes');
@@ -29,6 +30,7 @@ app.use(express.urlencoded({ extended: true, charset: 'utf-8' }));
 // --- REGISTRE AS ROTAS ---
 app.use('/api/auth', authRoutes);
 app.use('/api/alimentos', alimentoRoutes);
+app.use('/api/despensa', despensaRoutes);
 app.use('/api/refeicoes', refeicaoRoutes);
 app.use('/api/exercicios', exercicioRoutes);
 app.use('/api/treinos', treinoRoutes);
