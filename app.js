@@ -5,7 +5,7 @@ require('dotenv').config();
 // Rotas de Autenticação
 const authRoutes = require('./routes/authRoutes');
 
-// --- ADICIONE TODAS AS NOVAS ROTAS ---
+// --- ROTAS DO SISTEMA ---
 const alimentoRoutes = require('./routes/alimentoRoutes');
 const despensaRoutes = require('./routes/despensaRoutes');
 const refeicaoRoutes = require('./routes/refeicaoRoutes');
@@ -16,7 +16,8 @@ const perfilAlimentarRoutes = require('./routes/perfilAlimentarRoutes');
 const perfilTreinoRoutes = require('./routes/perfilTreinoRoutes');
 const refeicaoItemRoutes = require('./routes/refeicaoItemRoutes');
 const treinoExercicioRoutes = require('./routes/treinoExercicioRoutes');
-// ------------------------------------
+const historicoTreinoRoutes = require('./routes/historicoTreinoRoutes'); // <--- NOVO
+// -------------------------
 
 const { supabase } = require('./config/supabase');
 
@@ -39,6 +40,7 @@ app.use('/api/perfil-alimentar', perfilAlimentarRoutes);
 app.use('/api/perfil-treino', perfilTreinoRoutes);
 app.use('/api/refeicao-itens', refeicaoItemRoutes);
 app.use('/api/treino-exercicios', treinoExercicioRoutes);
+app.use('/api/historico-treinos', historicoTreinoRoutes); // <--- NOVO
 // -------------------------
 
 // Rota de teste
@@ -55,7 +57,6 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  // ... (seu código de log do usuário inicial)
 });
 
 module.exports = app;

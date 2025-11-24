@@ -22,12 +22,10 @@ class AuthController {
       if (!authData.user) return res.status(400).json({ error: 'Erro na criação do Auth.' });
 
       // 2. Inserir na tabela 'usuarios'
-      // Nota: IDs agora são Identity, mas o ID do usuário DEVE ser o mesmo do Auth (UUID),
-      // por isso inserimos manualmente o ID aqui.
       const { data: userData, error: userError } = await supabaseAdmin
         .from('usuarios')
         .insert([{
-          id: authData.user.id, // Vincula o UUID do Auth
+          id: authData.user.id,
           nome,
           email
         }])
@@ -35,13 +33,12 @@ class AuthController {
         .single();
 
       if (userError) {
-        // Rollback: apaga o usuário do Auth se falhar no banco
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         console.error('Erro ao criar na tabela usuarios:', userError);
         return res.status(400).json({ error: 'Erro ao registrar usuário no banco de dados.' });
       }
 
-      // 3. Auto-Login para retornar sessão
+      // 3. Auto-Login
       const { data: sessionData } = await supabase.auth.signInWithPassword({
         email, password
       });
@@ -68,7 +65,6 @@ class AuthController {
 
       if (error) return res.status(401).json({ error: 'Email ou senha incorretos.' });
 
-      // Busca dados do usuário
       const { data: usuario, error: userError } = await supabase
         .from('usuarios')
         .select('*')
@@ -87,34 +83,33 @@ class AuthController {
     }
   }
 
-  // --- COMPLETE PROFILE (Onboarding) ---
+  // --- COMPLETE PROFILE (Atualizado para o novo Schema) ---
   async completeProfile(req, res) {
     try {
-      // Pega ID do usuário logado (vem do middleware auth)
       const userId = req.user?.id;
-
-      if (!userId) {
-        return res.status(401).json({ error: 'Não autorizado.' });
-      }
+      if (!userId) return res.status(401).json({ error: 'Não autorizado.' });
 
       const {
         sexo,
         data_nascimento,
         altura,
         peso_inicial,
-        objetivo,
-        nivel_atividade // Esse campo vai para a tabela perfil_treino
+        objetivo,       // Texto (ex: "Hipertrofia")
+        peso_meta,      // NOVO: Numérico (ex: 80.5)
+        nivel_atividade // NOVO: Agora salvo no usuario
       } = req.body;
 
-      // 1. Atualiza tabela 'usuarios'
-      const { error: userError } = await supabase
+      // Atualiza tabela 'usuarios'
+      const { error: userError } = await supabaseAdmin
         .from('usuarios')
         .update({
           sexo,
           data_nascimento,
           altura,
           peso_inicial,
-          objetivo
+          objetivo,
+          peso_meta,      // Salva a meta numérica
+          nivel_atividade // Salva o nível
         })
         .eq('id', userId);
 
@@ -123,42 +118,8 @@ class AuthController {
         return res.status(400).json({ error: userError.message });
       }
 
-      // 2. Atualiza/Cria tabela 'perfil_treino'
-      // Verifica se já existe perfil
-      const { data: existingProfile } = await supabase
-        .from('perfil_treino')
-        .select('id')
-        .eq('usuario_fk', userId)
-        .maybeSingle(); // Use maybeSingle para não dar erro se for nulo
-
-      let perfilError;
-
-      if (existingProfile) {
-        // Atualiza existente
-        const { error } = await supabase
-          .from('perfil_treino')
-          .update({ nivel_atividade })
-          .eq('usuario_fk', userId);
-        perfilError = error;
-      } else {
-        // Cria novo
-        const { error } = await supabase
-          .from('perfil_treino')
-          .insert([{
-            usuario_fk: userId,
-            nivel_atividade
-          }]);
-        perfilError = error;
-      }
-
-      if (perfilError) {
-        console.error("Erro perfil_treino:", perfilError);
-        // Não retornamos erro fatal aqui, pois o usuário principal foi salvo
-        return res.status(200).json({ 
-          message: 'Perfil salvo (com aviso no treino).',
-          warning: 'Erro ao salvar nível de atividade.'
-        });
-      }
+      // Opcional: Se ainda quiser manter a tabela perfil_treino por compatibilidade ou dados extras
+      // Mas os dados principais já estão em 'usuarios' agora.
 
       return res.status(200).json({ message: 'Perfil completado com sucesso!' });
 
@@ -167,8 +128,8 @@ class AuthController {
       return res.status(500).json({ error: 'Erro interno do servidor' });
     }
   }
-
-  // --- OUTROS MÉTODOS (Mantidos para evitar erros de rota) ---
+  
+  // Mantidos
   async logout(req, res) {
     await supabase.auth.signOut();
     res.status(200).json({ message: 'Logout ok' });
